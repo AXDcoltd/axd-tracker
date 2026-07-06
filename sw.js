@@ -1,19 +1,15 @@
-const CACHE = 'axd-v1';
+const CACHE = 'axd-v7';
 const ASSETS = [
   './axd-tracker.html',
   './manifest.json',
-  'https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'
 ];
 
-// Install — cache all assets
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
   );
 });
 
-// Activate — clear old caches
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -22,28 +18,22 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch — serve from cache, fall back to network
+// Network first, fall back to cache
 self.addEventListener('fetch', e => {
-  // Skip non-GET and chrome-extension requests
   if(e.request.method !== 'GET') return;
   if(e.request.url.startsWith('chrome-extension')) return;
 
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      if(cached) return cached;
-      return fetch(e.request).then(response => {
-        // Cache successful responses
-        if(response && response.status === 200 && response.type === 'basic') {
-          const clone = response.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return response;
-      }).catch(() => {
-        // Offline fallback — return cached app shell
-        if(e.request.destination === 'document') {
-          return caches.match('./axd-tracker.html');
-        }
-      });
+    fetch(e.request).then(response => {
+      // Cache fresh response
+      if(response && response.status === 200) {
+        const clone = response.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+      }
+      return response;
+    }).catch(() => {
+      // Offline - serve from cache
+      return caches.match(e.request);
     })
   );
 });
