@@ -326,10 +326,15 @@ textarea.ta:focus{border-color:var(--teal)}
     <div class="login-logo">AXD</div>
     <div class="login-tag">Construction · Restoration · Finishes</div>
     <label class="lbl">Who are you?</label>
-    <select class="sel" id="loginName"></select>
+    <select class="sel" id="loginName" onchange="onLoginNameChange()"></select>
     <label class="lbl">PIN</label>
     <input class="pin-inp" type="password" inputmode="numeric" maxlength="4" placeholder="····" id="loginPin" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="login-btn" onclick="doLogin()">Enter workspace →</button>
+    <div id="biometricBtn" style="display:none;margin-top:10px">
+      <button onclick="biometricLogin()" style="width:100%;padding:11px;background:#f5f9f8;border:2px solid var(--teal);border-radius:var(--r);font:inherit;font-size:.88rem;font-weight:600;color:var(--teal);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+        <span style="font-size:1.3rem">🔐</span> Login with Face ID / Fingerprint
+      </button>
+    </div>
     <div class="login-err" id="loginErr"></div>
     <div class="login-hint">Ask your manager for your 4-digit PIN</div>
     <div id="syncStatus" style="margin-top:14px;text-align:center;font-size:.72rem;color:var(--mid)">⬤ Offline mode — changes saved locally</div>
@@ -444,6 +449,16 @@ textarea.ta:focus{border-color:var(--teal)}
   <!-- Settings tab -->
   <div id="aSettings" class="tab-panel app-shell">
     <div class="sec" style="margin-bottom:16px">Notification Settings</div>
+
+    <div style="background:var(--white);border:2px solid var(--teal);border-radius:8px;padding:20px;box-shadow:var(--sh);margin-bottom:20px">
+      <div class="sec" style="margin-bottom:10px;color:var(--teal)">🔐 Biometric Login — Fingerprint / Face ID</div>
+      <p style="font-size:.82rem;color:var(--mid);margin-bottom:12px">Register your fingerprint or Face ID so you can log in without typing your PIN. Each device registers separately.</p>
+      <div id="biometricStatus" style="font-size:.82rem;margin-bottom:12px;color:var(--mid)">Checking support…</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="registerBiometric()">Register this device</button>
+        <button class="btn btn-o" onclick="clearBiometric()">Clear saved biometrics</button>
+      </div>
+    </div>
 
     <div style="background:var(--white);border:2px solid var(--teal);border-radius:8px;padding:20px;box-shadow:var(--sh);margin-bottom:20px">
       <div class="sec" style="margin-bottom:14px;color:var(--teal)">🔄 Cloud Sync (Supabase) — sync across all devices</div>
@@ -922,7 +937,7 @@ function switchTab(screen, panelId){
   else if(panelId==='aSupervisors') renderSupCards();
   else if(panelId==='aCalendar')  renderCal();
   else if(panelId==='aQuotes')    renderAdminQuotes();
-  else if(panelId==='aSettings')  renderSettings();
+  else if(panelId==='aSettings')  {renderSettings();updateBioStatus();}
   else if(panelId==='sProjects')  renderSupTable();
   else if(panelId==='sCalendar')  renderSupCal();
   else if(panelId==='sQuotes')    renderSupQuotes();
@@ -2788,9 +2803,101 @@ async function forcePull(){
   else toast('Pull failed \u2014 check connection','warn');
 }
 
+// ═══════════════════════════════════════════════════
+//  BIOMETRIC LOGIN (WebAuthn)
+// ═══════════════════════════════════════════════════
+const BIO_KEY='axd_bio_cred';
+function b64url(buf){return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
+function b64urlToBuf(b64){const b=atob(b64.replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0)).buffer;}
+function isBioSupported(){return window.PublicKeyCredential&&typeof PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable==='function';}
+async function checkBioSupport(){if(!isBioSupported())return false;return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();}
+
+async function registerBiometric(){
+  if(!CU){toast('Log in first to register biometrics','warn');return;}
+  const ok=await checkBioSupport().catch(()=>false);
+  if(!ok){toast('Biometric not supported on this device/browser','warn');return;}
+  try{
+    const cred=await navigator.credentials.create({publicKey:{
+      challenge:crypto.getRandomValues(new Uint8Array(32)),
+      rp:{name:'AXD Tracker',id:location.hostname},
+      user:{id:new TextEncoder().encode(CU.id),name:CU.name,displayName:CU.name},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required'},
+      timeout:60000,
+    }});
+    const stored=JSON.parse(localStorage.getItem(BIO_KEY)||'{}');
+    stored[CU.id]=b64url(cred.rawId);
+    localStorage.setItem(BIO_KEY,JSON.stringify(stored));
+    toast('Biometric registered ✓ — use the fingerprint button next time you log in');
+    updateBioStatus();showBiometricBtn();
+  }catch(e){
+    toast(e.name==='NotAllowedError'?'Cancelled':'Registration failed: '+e.message,'warn');
+  }
+}
+
+async function biometricLogin(){
+  const supId=document.getElementById('loginName').value;
+  if(!supId){toast('Select your name first','warn');return;}
+  const stored=JSON.parse(localStorage.getItem(BIO_KEY)||'{}');
+  const credId=stored[supId];
+  if(!credId){toast('No biometric for this account — use PIN first','warn');return;}
+  try{
+    await navigator.credentials.get({publicKey:{
+      challenge:crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials:[{type:'public-key',id:b64urlToBuf(credId)}],
+      userVerification:'required',timeout:60000,
+    }});
+    const sup=S.supervisors.find(s=>s.id===supId);
+    if(!sup){toast('User not found','warn');return;}
+    document.getElementById('loginErr').textContent='';
+    CU=sup;adminPeeking=false;
+    if(sbUrl&&sbKey){
+      pullFromCloud().then(()=>{buildLoginList();CU=S.supervisors.find(s=>s.id===sup.id)||sup;CU.isAdmin?showAdmin():showSup();});
+    } else {CU.isAdmin?showAdmin():showSup();}
+  }catch(e){
+    toast(e.name==='NotAllowedError'?'Biometric not recognised — try again or use PIN':'Biometric failed','warn');
+  }
+}
+
+function clearBiometric(){
+  confirmDo('Clear biometrics?','Removes all saved fingerprint/Face ID on this device.',()=>{
+    localStorage.removeItem(BIO_KEY);
+    toast('Cleared');updateBioStatus();
+    const b=document.getElementById('biometricBtn');if(b)b.style.display='none';
+  });
+}
+
+async function updateBioStatus(){
+  const el=document.getElementById('biometricStatus');if(!el)return;
+  const ok=await checkBioSupport().catch(()=>false);
+  if(!ok){el.innerHTML='<span style="color:var(--danger)">✕ Not supported on this device or browser</span>';return;}
+  const stored=JSON.parse(localStorage.getItem(BIO_KEY)||'{}');
+  const names=Object.keys(stored).map(id=>{const s=S.supervisors.find(x=>x.id===id);return s?s.name:id;});
+  el.innerHTML=names.length
+    ?`<span style="color:var(--success)">✓ Registered on this device: ${names.join(', ')}</span>`
+    :'<span style="color:var(--warn)">No biometrics registered on this device yet</span>';
+}
+
+async function showBiometricBtn(){
+  const btn=document.getElementById('biometricBtn');if(!btn)return;
+  const stored=JSON.parse(localStorage.getItem(BIO_KEY)||'{}');
+  const ok=await checkBioSupport().catch(()=>false);
+  btn.style.display=(ok&&Object.keys(stored).length)?'block':'none';
+}
+
+function onLoginNameChange(){
+  const supId=document.getElementById('loginName').value;
+  const stored=JSON.parse(localStorage.getItem(BIO_KEY)||'{}');
+  checkBioSupport().then(ok=>{
+    const btn=document.getElementById('biometricBtn');
+    if(btn)btn.style.display=(ok&&stored[supId])?'block':'none';
+  }).catch(()=>{});
+}
+
 initEmailJS();
 initSupabase();
 buildLoginList();
+showBiometricBtn();
 document.getElementById('loginScreen').classList.add('active');
 
 // ── PWA SERVICE WORKER ──
