@@ -2752,7 +2752,62 @@ async function pullFromCloud(){
 
 function startAutoSync(){
   clearInterval(syncTimer);
-  syncTimer = setInterval(()=>pushToCloud(), 30000);
+  syncTimer = setInterval(async ()=>{
+    if(!CU) return;
+    const changed = await pullAndRefresh();
+    if(!changed) await pushToCloud();
+  }, 10000);
+}
+
+async function pullAndRefresh(){
+  if(!sbUrl||!sbKey) return false;
+  try{
+    const res = await fetch(sbUrl+'/rest/v1/axd_data?id=eq.'+SB_ROW_ID+'&select=data,updated_at', {
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey}
+    });
+    if(!res.ok) return false;
+    const rows = await res.json();
+    if(!rows||!rows.length||!rows[0].data) return false;
+    const cloud = rows[0].data;
+    // Check if cloud data is different by comparing updated_at or project count
+    const cloudStr = JSON.stringify(cloud.projects||[]);
+    const localStr = JSON.stringify(S.projects||[]);
+    if(cloudStr === localStr) return false; // no change
+    // Cloud has newer data — apply it
+    if(!cloud.visits)cloud.visits=[];
+    if(!cloud.quotes)cloud.quotes=[];
+    if(!cloud.pipeline)cloud.pipeline=[];
+    if(!cloud.emailConfig)cloud.emailConfig={publicKey:'',serviceId:'',templateId:''};
+    if(cloud.projects){
+      cloud.projects.forEach(p=>{
+        if(!p.tasks)p.tasks=[]; if(!p.dailyLog)p.dailyLog=[];
+        if(!p.files)p.files=[]; if(!('urgency' in p))p.urgency='';
+        if(!p.snagList)p.snagList=[]; if(!p.variationList)p.variationList=[];
+        if(!p.projectStatus)p.projectStatus='active';
+        if(!('invoiced' in p))p.invoiced=false;
+        if(!p.completedAt)p.completedAt=''; if(!p.priority)p.priority='';
+        if(!p.tlStart)p.tlStart=''; if(!p.tlEnd)p.tlEnd=''; if(!p.tlNotes)p.tlNotes='';
+        if(!p.clientName)p.clientName=''; if(!p.clientMobile)p.clientMobile='';
+        if(!p.clientEmail)p.clientEmail=''; if(!p.clientLocation)p.clientLocation='';
+      });
+    }
+    S=cloud;
+    try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+    setSyncChip(true);
+    // Refresh current screen silently
+    if(CU){
+      const cu=S.supervisors.find(s=>s.id===CU.id);
+      if(cu)CU=cu;
+      if(document.getElementById('reportScreen').classList.contains('active')&&reportPid){
+        renderReport(reportPid);
+      } else if(isAdmin()){
+        renderAdmin();
+      } else {
+        renderSupTable();
+      }
+    }
+    return true;
+  }catch(e){ return false; }
 }
 
 function saveState(){
