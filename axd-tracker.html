@@ -353,6 +353,8 @@ textarea.ta:focus{border-color:var(--teal)}
         <button class="nav-tab active" data-tab="aProjects"    onclick="switchTab('admin','aProjects')">Projects</button>
         <button class="nav-tab" data-tab="aPipeline"           onclick="switchTab('admin','aPipeline')">Pipeline</button>
         <button class="nav-tab" data-tab="aCompleted"          onclick="switchTab('admin','aCompleted')">Completed</button>
+        <button class="nav-tab" data-tab="aTasks"              onclick="switchTab('admin','aTasks')">Tasks</button>
+        <button class="nav-tab" data-tab="aSnags"              onclick="switchTab('admin','aSnags')">Snags</button>
         <button class="nav-tab" data-tab="aSupervisors"        onclick="switchTab('admin','aSupervisors')">Supervisors</button>
         <button class="nav-tab" data-tab="aCalendar"           onclick="switchTab('admin','aCalendar')">Site Visits</button>
         <button class="nav-tab" data-tab="aQuotes"             onclick="switchTab('admin','aQuotes')">Quotes</button>
@@ -404,6 +406,31 @@ textarea.ta:focus{border-color:var(--teal)}
     <div class="stats-row" id="completedStats"></div>
     <div class="tcard" id="completedTableWrap"></div>
   </div>
+  <!-- Tasks tab -->
+  <div id="aTasks" class="tab-panel app-shell">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <div class="sec" style="margin:0;border:none;padding:0">📋 All Open Tasks</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer;margin-left:auto">
+        <input type="checkbox" id="showDoneTasks" onchange="renderTasksTab()" style="accent-color:var(--teal)">
+        Show completed tasks too
+      </label>
+    </div>
+    <div id="tasksTabWrap"></div>
+  </div>
+
+  <!-- Snags tab -->
+  <div id="aSnags" class="tab-panel app-shell">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <div class="sec" style="margin:0;border:none;padding:0">🔧 All Open Snags</div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:.8rem;cursor:pointer;margin-left:auto">
+        <input type="checkbox" id="showDoneSnags" onchange="renderSnagsTab()" style="accent-color:var(--teal)">
+        Show completed snags too
+      </label>
+    </div>
+    <div id="snagsTabWrap"></div>
+  </div>
+
+  <!-- Supervisors tab -->
   <div id="aSupervisors" class="tab-panel app-shell">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <div class="sec" style="margin:0;border:none;padding:0">Supervisor workspaces</div>
@@ -602,7 +629,20 @@ textarea.ta:focus{border-color:var(--teal)}
     <div class="fr"><label>Client Name</label><input type="text" id="pClientName" placeholder="e.g. Mr. Borg"></div>
     <div class="fr"><label>Mobile Number</label><input type="tel" id="pClientMobile" placeholder="e.g. +35679123456"></div>
     <div class="fr"><label>Email</label><input type="email" id="pClientEmail" placeholder="e.g. borg@email.com"></div>
-    <div class="fr"><label>Location (paste Google Maps link or address)</label><input type="text" id="pClientLocation" placeholder="e.g. https://maps.google.com/?q=... or Triq il-Kbira, Valletta"></div>
+    <div class="fr"><label>Architect in charge</label><input type="text" id="pClientArchitect" placeholder="e.g. Arch. John Borg"></div>
+    <div class="fr"><label>Architect mobile</label><input type="tel" id="pArchitectMobile" placeholder="e.g. +35679123456"></div>
+    <div class="fr"><label>Architect email</label><input type="email" id="pArchitectEmail" placeholder="e.g. arch.borg@email.com"></div>
+    <div class="fr">
+      <label>Location — paste a Google Maps link or address</label>
+      <input type="text" id="pClientLocation" 
+        placeholder="Paste Google Maps link or type address…"
+        oninput="previewLocationInput(this.value)"
+        style="margin-bottom:6px">
+      <div id="locationPreview" style="display:none;background:#f0f7f6;border:1px solid var(--border);border-radius:6px;padding:10px;font-size:.8rem;margin-top:4px">
+        <a id="locationPreviewLink" href="#" target="_blank" style="color:var(--teal);font-weight:700;text-decoration:none">📍 View on Google Maps →</a>
+        <div id="locationPreviewCoords" style="color:var(--mid);font-size:.72rem;margin-top:3px"></div>
+      </div>
+    </div>
     <div class="fr"><label>Remarks</label><textarea id="pRemarks"></textarea></div>
     <div class="modal-act">
       <button class="btn btn-o" onclick="closeOv('projModal')">Cancel</button>
@@ -815,10 +855,10 @@ textarea.ta:focus{border-color:var(--teal)}
 // ═══════════════════════════════════════════════════
 const KEY='axd_v7';
 const CKS=[
-  {id:'ra',l:'RA'},{id:'qr',l:'QR'},{id:'scaff',l:'SCAFF'},{id:'scaffCert',l:'SCAFF CERT'},
+  {id:'ra',l:'RA'},{id:'qr',l:'QR'},{id:'scaff',l:'SCAFFOLDING'},{id:'scaffCert',l:'SCAFF CERT'},
   {id:'samples',l:'SAMPLES'},{id:'banner',l:'AXD BANNER'},{id:'sign',l:'AXD SIGN'},
   {id:'safetysign',l:'SAFETY SIGN'},{id:'pasign',l:'PA SIGN'},{id:'fireExt',l:'FIRE EXT'},
-  {id:'firstAid',l:'FIRST AID'},{id:'snags',l:'SNAGS'},{id:'signsRet',l:'SIGNS RET.'},
+  {id:'firstAid',l:'FIRST AID'},{id:'signsRet',l:'SIGNS RETURNED'},
 ];
 const URG={
   '':       {label:'— No status', cls:'urg-none',       row:''},
@@ -832,7 +872,7 @@ function mkProj(name,supIds,checks,remarks){
   const p={id:uid(),name,supIds:supIds||[],remarks:remarks||'',files:[],dailyLog:[],tasks:[],snagList:[],variationList:[],urgency:'',
     projectStatus:'active', invoiced:false, completedAt:'', priority:'',
     tlStart:'',tlEnd:'',tlNotes:'',
-    clientName:'',clientMobile:'',clientEmail:'',clientLocation:''};
+    clientName:'',clientMobile:'',clientEmail:'',clientLocation:'',clientArchitect:'',architectMobile:'',architectEmail:''};
   CKS.forEach(c=>p[c.id]=false);Object.assign(p,checks||{});return p;
 }
 function defaultState(){
@@ -903,11 +943,6 @@ function loadState(){
   }catch(e){}
   return defaultState();
 }
-function saveState(){
-  try{localStorage.setItem(KEY,JSON.stringify(S));}
-  catch(e){toast('Storage full','warn');}
-}
-
 // ═══════════════════════════════════════════════════
 //  TAB SWITCHING — single reliable function
 // ═══════════════════════════════════════════════════
@@ -920,7 +955,7 @@ function switchTab(screen, panelId){
   if(btn)btn.classList.add('active');
   // hide all panels for this screen
   const panels = screen==='admin'
-    ? ['aProjects','aPipeline','aCompleted','aSupervisors','aCalendar','aQuotes','aSettings']
+    ? ['aProjects','aPipeline','aCompleted','aTasks','aSnags','aSupervisors','aCalendar','aQuotes','aSettings']
     : ['sProjects','sCalendar','sQuotes'];
   panels.forEach(id=>{
     const el=document.getElementById(id);
@@ -934,6 +969,8 @@ function switchTab(screen, panelId){
   if(panelId==='aProjects')      renderAdmin();
   else if(panelId==='aPipeline')    renderPipeline();
   else if(panelId==='aCompleted')   renderCompletedTab();
+  else if(panelId==='aTasks')       renderTasksTab();
+  else if(panelId==='aSnags')       renderSnagsTab();
   else if(panelId==='aSupervisors') renderSupCards();
   else if(panelId==='aCalendar')  renderCal();
   else if(panelId==='aQuotes')    renderAdminQuotes();
@@ -941,6 +978,173 @@ function switchTab(screen, panelId){
   else if(panelId==='sProjects')  renderSupTable();
   else if(panelId==='sCalendar')  renderSupCal();
   else if(panelId==='sQuotes')    renderSupQuotes();
+}
+
+function renderTasksTab(){
+  const wrap=document.getElementById('tasksTabWrap');if(!wrap)return;
+  const showDone=document.getElementById('showDoneTasks')?.checked;
+
+  // Collect all tasks across active projects
+  const allTasks=[];
+  S.projects.filter(p=>(p.projectStatus||'active')==='active').forEach(p=>{
+    (p.tasks||[]).forEach((t,idx)=>{
+      if(!showDone&&t.done)return;
+      allTasks.push({task:t, taskIdx:idx, project:p});
+    });
+  });
+
+  if(!allTasks.length){
+    wrap.innerHTML=`<div style="padding:40px;text-align:center;color:var(--mid);font-size:.88rem">
+      ${showDone?'No tasks found.':'No open tasks — great work! 🎉'}
+    </div>`;
+    return;
+  }
+
+  // Group by assignee
+  const groups={};
+  allTasks.forEach(({task,taskIdx,project})=>{
+    const key=task.assigneeId||'__unassigned__';
+    if(!groups[key])groups[key]={name:task.assigneeName||'Unassigned',tasks:[]};
+    groups[key].tasks.push({task,taskIdx,project});
+  });
+
+  // Sort: admins first, then supervisors alphabetically, unassigned last
+  const sortedKeys=Object.keys(groups).sort((a,b)=>{
+    if(a==='__unassigned__')return 1;
+    if(b==='__unassigned__')return -1;
+    const sa=S.supervisors.find(s=>s.id===a);
+    const sb=S.supervisors.find(s=>s.id===b);
+    if(sa?.isAdmin&&!sb?.isAdmin)return -1;
+    if(!sa?.isAdmin&&sb?.isAdmin)return 1;
+    return groups[a].name.localeCompare(groups[b].name);
+  });
+
+  wrap.innerHTML=sortedKeys.map(key=>{
+    const group=groups[key];
+    const sup=S.supervisors.find(s=>s.id===key);
+    const openCount=group.tasks.filter(x=>!x.task.done).length;
+    const doneCount=group.tasks.filter(x=>x.task.done).length;
+
+    const taskRows=group.tasks.map(({task,taskIdx,project})=>`
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <button class="task-chk ${task.done?'on':''}" onclick="toggleTaskFromTab('${project.id}',${taskIdx})" style="margin-top:2px;flex-shrink:0">✓</button>
+        <div style="flex:1">
+          <div style="font-size:.86rem;font-weight:600;${task.done?'text-decoration:line-through;color:var(--mid)':''}">${esc(task.text)}</div>
+          <div style="font-size:.72rem;color:var(--mid);margin-top:3px">
+            📁 <span style="cursor:pointer;color:var(--teal);text-decoration:underline" onclick="openReport('${project.id}','admin')">${esc(project.name)}</span>
+            ${task.due?` · 📅 ${task.due}`:''}
+            ${task.done?` · ✓ Done`:''}
+          </div>
+        </div>
+      </div>`).join('');
+
+    return`<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;overflow:hidden;box-shadow:var(--sh)">
+      <div style="padding:12px 16px;background:var(--teal);color:var(--white);display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.9rem;flex-shrink:0">
+          ${esc(group.name.slice(0,2).toUpperCase())}
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:.92rem">${esc(group.name)}${sup?.isAdmin?' (Manager)':''}</div>
+          <div style="font-size:.72rem;opacity:.8">${openCount} open${doneCount?' · '+doneCount+' done':''}</div>
+        </div>
+        ${sup&&!sup.isAdmin?'<button class="btn btn-s" style="margin-left:auto;background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3)" onclick="adminPeek(\''+sup.id+'\')">View workspace →</button>':''}
+      </div>
+      <div style="padding:0 16px">${taskRows}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleTaskFromTab(pid,idx){
+  const p=S.projects.find(x=>x.id===pid);if(!p)return;
+  p.tasks[idx].done=!p.tasks[idx].done;
+  saveState();
+  renderTasksTab();
+  renderAdminStats();
+}
+
+function renderSnagsTab(){
+  const wrap=document.getElementById('snagsTabWrap');if(!wrap)return;
+  const showDone=document.getElementById('showDoneSnags')?.checked;
+
+  const allSnags=[];
+  S.projects.filter(p=>(p.projectStatus||'active')==='active').forEach(p=>{
+    (p.snagList||[]).forEach((s,idx)=>{
+      if(!showDone&&s.done)return;
+      allSnags.push({snag:s,snagIdx:idx,project:p});
+    });
+  });
+
+  if(!allSnags.length){
+    wrap.innerHTML=`<div style="padding:40px;text-align:center;color:var(--mid);font-size:.88rem">
+      ${showDone?'No snags found.':'No open snags — all clear! 🎉'}
+    </div>`;
+    return;
+  }
+
+  // Group by assignee
+  const groups={};
+  allSnags.forEach(({snag,snagIdx,project})=>{
+    const key=snag.assigneeId||'__unassigned__';
+    if(!groups[key])groups[key]={name:snag.assigneeName||'Unassigned',snags:[]};
+    groups[key].snags.push({snag,snagIdx,project});
+  });
+
+  const sortedKeys=Object.keys(groups).sort((a,b)=>{
+    if(a==='__unassigned__')return 1;
+    if(b==='__unassigned__')return -1;
+    const sa=S.supervisors.find(s=>s.id===a);
+    const sb=S.supervisors.find(s=>s.id===b);
+    if(sa?.isAdmin&&!sb?.isAdmin)return -1;
+    if(!sa?.isAdmin&&sb?.isAdmin)return 1;
+    return groups[a].name.localeCompare(groups[b].name);
+  });
+
+  wrap.innerHTML=sortedKeys.map(key=>{
+    const group=groups[key];
+    const sup=S.supervisors.find(s=>s.id===key);
+    const openCount=group.snags.filter(x=>!x.snag.done).length;
+    const doneCount=group.snags.filter(x=>x.snag.done).length;
+
+    const snagRows=group.snags.map(({snag,snagIdx,project})=>`
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+        <button class="snag-chk ${snag.done?'on':''}" onclick="toggleSnagFromTab('${project.id}',${snagIdx})" style="margin-top:2px;flex-shrink:0">✓</button>
+        <div style="flex:1">
+          <div style="font-size:.86rem;font-weight:600;${snag.done?'text-decoration:line-through;color:var(--mid)':''}">${esc(snag.desc)}</div>
+          <div style="font-size:.72rem;color:var(--mid);margin-top:3px">
+            📁 <span style="cursor:pointer;color:var(--teal);text-decoration:underline" onclick="openReport('${project.id}','admin')">${esc(project.name)}</span>
+            ${snag.loc?' · 📍 '+esc(snag.loc):''}
+            ${snag.done&&snag.doneAt?' · ✓ Done: '+esc(snag.doneAt):''}
+          </div>
+          ${(snag.photos||[]).length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+            ${(snag.photos||[]).slice(0,3).map(ph=>`<img src="${ph}" style="width:52px;height:52px;object-fit:cover;border-radius:5px;border:1px solid var(--border);cursor:pointer" onclick="showFP({name:'Snag',type:'image/jpeg',data:'${ph}'})">`).join('')}
+            ${snag.photos.length>3?`<div style="width:52px;height:52px;background:#f0f0f0;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.72rem;color:var(--mid)">+${snag.photos.length-3}</div>`:''}
+          </div>`:''}
+        </div>
+      </div>`).join('');
+
+    return`<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;overflow:hidden;box-shadow:var(--sh)">
+      <div style="padding:12px 16px;background:var(--danger);color:var(--white);display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.9rem;flex-shrink:0">
+          ${esc(group.name.slice(0,2).toUpperCase())}
+        </div>
+        <div>
+          <div style="font-weight:700;font-size:.92rem">${esc(group.name)}${sup?.isAdmin?' (Manager)':''}</div>
+          <div style="font-size:.72rem;opacity:.8">${openCount} open${doneCount?' · '+doneCount+' done':''}</div>
+        </div>
+        ${sup&&!sup.isAdmin?'<button class="btn btn-s" style="margin-left:auto;background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.3)" onclick="adminPeek(\''+sup.id+'\')">View workspace →</button>':''}
+      </div>
+      <div style="padding:0 16px">${snagRows}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSnagFromTab(pid,idx){
+  const p=S.projects.find(x=>x.id===pid);if(!p)return;
+  p.snagList[idx].done=!p.snagList[idx].done;
+  if(p.snagList[idx].done)p.snagList[idx].doneAt=new Date().toLocaleDateString('en-GB');
+  saveState();
+  renderSnagsTab();
+  renderAdminStats();
 }
 
 function renderAdmin(){
@@ -1085,6 +1289,7 @@ function renderAdminStats(){
   const invoiced=completed.filter(p=>p.invoiced).length;
   const notInvoiced=completed.length-invoiced;
   const openT=active.reduce((a,p)=>a+(p.tasks||[]).filter(t=>!t.done).length,0);
+  const openSnags=active.reduce((a,p)=>a+(p.snagList||[]).filter(s=>!s.done).length,0);
   const crit=active.filter(p=>p.urgency==='critical').length;
   const np=active.filter(p=>p.urgency==='needs-push').length;
   const newQ=S.quotes.filter(q=>q.status==='new').length;
@@ -1094,7 +1299,8 @@ function renderAdminStats(){
     <div class="stat clickable" onclick="switchTab('admin','aCompleted')"><div class="stat-n" style="color:var(--success)">${completed.length}</div><div class="stat-l">Completed</div></div>
     ${notInvoiced?`<div class="stat clickable" style="border-color:var(--warn)" onclick="switchTab('admin','aCompleted')"><div class="stat-n" style="color:var(--warn)">${notInvoiced}</div><div class="stat-l">Not invoiced</div></div>`:''}
     <div class="stat clickable" onclick="switchTab('admin','aSupervisors')"><div class="stat-n">${S.supervisors.filter(s=>!s.isAdmin).length}</div><div class="stat-l">Supervisors</div></div>
-    <div class="stat clickable" onclick="switchTab('admin','aProjects')"><div class="stat-n">${openT}</div><div class="stat-l">Open tasks</div></div>
+    <div class="stat clickable" onclick="switchTab('admin','aTasks')"><div class="stat-n">${openT}</div><div class="stat-l">Open tasks</div></div>
+    ${openSnags?`<div class="stat clickable" style="border-color:var(--danger)" onclick="switchTab('admin','aSnags')"><div class="stat-n" style="color:var(--danger)">${openSnags}</div><div class="stat-l">Open snags</div></div>`:''}
     ${np?`<div class="stat clickable" style="border-color:var(--warn)" onclick="setUrgFilter('needs-push')"><div class="stat-n" style="color:var(--warn)">${np}</div><div class="stat-l">Needs push</div></div>`:''}
     ${crit?`<div class="stat clickable" style="border-color:var(--danger)" onclick="setUrgFilter('critical')"><div class="stat-n" style="color:var(--danger)">${crit}</div><div class="stat-l">Critical</div></div>`:''}
     ${newQ?`<div class="stat clickable" style="border-color:var(--warn)" onclick="switchTab('admin','aQuotes')"><div class="stat-n" style="color:var(--warn)">${newQ}</div><div class="stat-l">New quotes</div></div>`:''}`;
@@ -1167,7 +1373,7 @@ function renderAdminTable(){
         <div style="font-size:.66rem;color:var(--mid);margin-top:3px">${doneChecks}/${CKS.length} done</div>
       </td>
       <td style="font-size:.72rem;color:var(--mid);text-align:center">
-        ${openT?`<span style="color:var(--warn);cursor:pointer" onclick="openReport('${p.id}','admin')">⊙${openT}</span> `:''}
+        ${openT?`<span style="color:var(--warn);cursor:pointer;font-weight:600" onclick="openReport('${p.id}','admin')" title="View tasks">⊙${openT} task${openT>1?'s':''}</span> `:''}
         ${openSnags?`<span style="color:var(--danger);cursor:pointer" onclick="openReport('${p.id}','admin')">🔧${openSnags}</span> `:''}
         ${fc?`<span>📎${fc}</span>`:''}
       </td>
@@ -1223,6 +1429,76 @@ function renderCompletedTab(){
     <th class="tl">PROJECT</th><th class="tl">TEAM</th><th class="tl">CLIENT</th>
     <th>INVOICED</th><th>COMPLETED</th><th></th>
   </tr></thead><tbody>${tbody||'<tr><td colspan="99" style="padding:20px;text-align:center;color:var(--mid)">No completed projects yet</td></tr>'}</tbody></table>`;
+}
+
+function updateLocation(pid, val){
+  const p=S.projects.find(x=>x.id===pid);if(!p)return;
+  p.clientLocation=val.trim();
+  saveState();
+}
+
+// Parse any Google Maps link format and return a clean maps URL + coords string
+function parseMapsInput(raw){
+  const s=raw.trim();
+  if(!s)return null;
+
+  // Extract lat/lng from various Google Maps URL formats:
+  // https://maps.google.com/?q=35.9042,14.5189
+  // https://www.google.com/maps/place/.../@35.9042,14.5189,17z
+  // https://maps.app.goo.gl/... (short link - can't extract coords but keep as-is)
+  // https://goo.gl/maps/...
+  // https://maps.google.com/maps?q=loc:35.9042+14.5189
+
+  let lat=null, lng=null;
+
+  // Try @lat,lng pattern (Google Maps place URLs)
+  let m=s.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*)/);
+  if(m){lat=m[1];lng=m[2];}
+
+  // Try ?q=lat,lng pattern
+  if(!lat){m=s.match(/[?&]q=(-?\d+\.?\d*)[,+](-?\d+\.?\d*)/);if(m){lat=m[1];lng=m[2];}}
+
+  // Try ll=lat,lng pattern
+  if(!lat){m=s.match(/ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/);if(m){lat=m[1];lng=m[2];}}
+
+  // Try !3d lat !4d lng pattern (used in some embed URLs)
+  if(!lat){m=s.match(/!3d(-?\d+\.?\d*).*!4d(-?\d+\.?\d*)/);if(m){lat=m[1];lng=m[2];}}
+
+  if(lat&&lng){
+    return {
+      url:`https://www.google.com/maps?q=${lat},${lng}`,
+      coords:`${lat}, ${lng}`,
+      display:`${lat}, ${lng}`
+    };
+  }
+
+  // If it's already any http URL (goo.gl, maps.app.goo.gl etc.) keep it
+  if(s.startsWith('http')){
+    return {url:s, coords:'', display:'Custom Maps link'};
+  }
+
+  // Plain text address
+  return {
+    url:`https://www.google.com/maps/search/${encodeURIComponent(s)}`,
+    coords:'',
+    display:s
+  };
+}
+
+function previewLocationInput(val){
+  const preview=document.getElementById('locationPreview');
+  const link=document.getElementById('locationPreviewLink');
+  const coords=document.getElementById('locationPreviewCoords');
+  if(!val.trim()){preview.style.display='none';return;}
+  const parsed=parseMapsInput(val);
+  if(parsed){
+    preview.style.display='block';
+    link.href=parsed.url;
+    link.textContent=`📍 ${parsed.display} — tap to verify on Google Maps`;
+    coords.textContent=parsed.coords?`Coordinates: ${parsed.coords}`:'';
+  } else {
+    preview.style.display='none';
+  }
 }
 
 function adminToggle(pid,col){
@@ -1293,10 +1569,12 @@ function renderSupTable(){
   const my=S.projects.filter(p=>(p.supIds||[]).includes(CU.id));
   const el=document.getElementById('supStats');
   const openT=my.reduce((a,p)=>a+(p.tasks||[]).filter(t=>!t.done&&(t.assigneeId===CU.id||!t.assigneeId)).length,0);
+  const pendingVisits=S.visits.filter(v=>(v.supIds||[]).includes(CU.id)&&!(v.acceptStatus||{})[CU.id]&&new Date(v.date)>=new Date()).length;
   if(el)el.innerHTML=`
     <div class="stat clickable" onclick="switchTab('sup','sProjects')"><div class="stat-n">${my.length}</div><div class="stat-l">${adminPeeking?CU.name+"'s":'My'} Projects</div></div>
     <div class="stat clickable" onclick="switchTab('sup','sProjects')"><div class="stat-n">${openT}</div><div class="stat-l">Open tasks</div></div>
     <div class="stat clickable" onclick="switchTab('sup','sCalendar')"><div class="stat-n">${S.visits.filter(v=>(v.supIds||[]).includes(CU.id)).length}</div><div class="stat-l">Site visits</div></div>
+    ${pendingVisits?`<div class="stat clickable" style="border-color:var(--warn)" onclick="switchTab('sup','sCalendar')"><div class="stat-n" style="color:var(--warn)">${pendingVisits}</div><div class="stat-l">Visits pending</div></div>`:''}
     <div class="stat clickable" onclick="switchTab('sup','sQuotes')"><div class="stat-n">${S.quotes.filter(q=>q.supId===CU.id).length}</div><div class="stat-l">Quotes</div></div>`;
   if(!my.length){wrap.innerHTML=`<div style="padding:30px;text-align:center;color:var(--mid)">${adminPeeking?CU.name+' has no projects assigned yet.':'No projects assigned yet.'}</div>`;return;}
   const rows=my.map(p=>{
@@ -1315,15 +1593,37 @@ function renderSupTable(){
     return`<tr class="${u.row}">
       <td class="tl" style="min-width:160px">
         <div class="proj-link" onclick="openReport('${p.id}','sup')">${esc(p.name)}</div>
+        ${p.clientLocation?`<div style="font-size:.72rem;color:var(--mid);margin-top:2px">📍 ${esc(p.clientLocation.startsWith('http')?'View on Maps':p.clientLocation.slice(0,40)+(p.clientLocation.length>40?'…':''))}</div>`:''}
         <div style="margin-top:4px">${urgSelect}</div>
       </td>
       <td style="font-size:.72rem;text-align:center">
         <span style="color:var(--teal);font-weight:700">${doneChecks}</span><span style="color:var(--mid)">/${CKS.length}</span>
       </td>
-      <td style="font-size:.72rem;color:var(--mid);text-align:center">
-        ${myT.length?`<span style="color:var(--warn)">⊙${myT.length} task${myT.length>1?'s':''}</span> `:''}
-        ${mySnags.length?`<span style="color:var(--danger)">🔧${mySnags.length} snag${mySnags.length>1?'s':''}</span>`:''}
-        ${fc?`<span>📎${fc}</span>`:''}
+      <td style="min-width:160px;padding:8px 10px">
+        ${myT.length?`
+          <div style="margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+              <span style="font-size:.7rem;font-weight:700;color:var(--warn)">⊙ TASKS</span>
+              <span style="font-size:.7rem;color:var(--mid)">${myT.length} open</span>
+            </div>
+            <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden">
+              <div style="background:var(--warn);height:100%;width:${Math.round(((p.tasks||[]).filter(t=>t.done).length/((p.tasks||[]).length||1))*100)}%"></div>
+            </div>
+            <button class="btn btn-s" style="margin-top:5px;width:100%;background:#fff7e6;color:var(--warn);border:1px solid var(--warn);font-size:.72rem" onclick="openReport('${p.id}','sup')">Open tasks →</button>
+          </div>`:'<div style="font-size:.72rem;color:var(--mid);padding:4px 0">✓ No open tasks</div>'}
+        ${mySnags.length?`
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+              <span style="font-size:.7rem;font-weight:700;color:var(--danger)">🔧 SNAGS</span>
+              <span style="font-size:.7rem;color:var(--mid)">${mySnags.length} open</span>
+            </div>
+            <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden">
+              <div style="background:var(--danger);height:100%;width:${Math.round(((p.snagList||[]).filter(s=>s.done).length/((p.snagList||[]).length||1))*100)}%"></div>
+            </div>
+            <button class="btn btn-s" style="margin-top:5px;width:100%;background:#fdf5f5;color:var(--danger);border:1px solid var(--danger);font-size:.72rem" onclick="openReport('${p.id}','sup')">Open snags →</button>
+          </div>`:'<div style="font-size:.72rem;color:var(--mid);padding:4px 0">✓ No open snags</div>'}
+        ${!myT.length&&!mySnags.length?`<div style="font-size:.72rem;color:var(--success);font-weight:600">✓ All clear</div>`:''}
+        ${fc?`<div style="font-size:.72rem;color:var(--mid);margin-top:4px">📎 ${fc} file${fc>1?'s':''}</div>`:''}
       </td>
       <td>
         <button class="btn btn-p btn-s" onclick="openReport('${p.id}','sup')">Open</button>
@@ -1338,7 +1638,7 @@ function renderSupTable(){
   wrap.innerHTML=`<table><thead><tr>
     <th class="tl">PROJECT</th>
     <th>CHECKS</th>
-    <th>TASKS/SNAGS/FILES</th>
+    <th>TASKS & SNAGS</th>
     <th></th>
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -1470,16 +1770,48 @@ function renderReport(pid){
           <a href="mailto:${esc(p.clientEmail)}" style="font-size:.88rem;font-weight:600;color:var(--teal);text-decoration:none">
             ✉ ${esc(p.clientEmail)}</a>
         </div>`:''}
-        ${p.clientLocation?`<div>
-          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mid);margin-bottom:4px">Location</div>
-          <a href="${p.clientLocation.startsWith('http')?esc(p.clientLocation):'https://www.google.com/maps/search/'+encodeURIComponent(p.clientLocation)}" 
-            target="_blank"
-            style="font-size:.88rem;font-weight:600;color:var(--teal);text-decoration:none;display:flex;align-items:center;gap:5px">
-            📍 ${p.clientLocation.startsWith('http')?'Open in Maps':esc(p.clientLocation)}
-          </a>
+        ${p.clientArchitect?`<div>
+          <div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--mid);margin-bottom:4px">Architect</div>
+          <div style="font-size:.88rem;font-weight:600">🏛 ${esc(p.clientArchitect)}</div>
+          ${p.architectMobile?`<a href="tel:${esc(p.architectMobile)}" style="font-size:.82rem;color:var(--teal);text-decoration:none;display:flex;align-items:center;gap:5px;margin-top:4px">📞 ${esc(p.architectMobile)}</a>
+          <a href="https://wa.me/${p.architectMobile.replace(/\D/g,'')}" target="_blank" style="font-size:.74rem;color:var(--wa);font-weight:600;display:flex;align-items:center;gap:4px;margin-top:3px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.119.554 4.107 1.523 5.832L0 24l6.335-1.493A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.663-.5-5.187-1.373l-.372-.22-3.763.887.938-3.669-.242-.389A9.938 9.938 0 012 12c0-5.514 4.486-10 10-10s10 4.486 10 10-4.486 10-10 10z"/></svg>
+            WhatsApp
+          </a>`:''}
+          ${p.architectEmail?`<a href="mailto:${esc(p.architectEmail)}" style="font-size:.82rem;color:var(--teal);text-decoration:none;display:flex;align-items:center;gap:5px;margin-top:3px">✉ ${esc(p.architectEmail)}</a>`:''}
         </div>`:''}
       </div>`
       :`<div style="font-size:.84rem;color:var(--mid)">${isAdmin()?'No client info yet — click Edit to add.':'No client info added yet.'}</div>`}
+    </div>
+    <div class="report-card full">
+      <div class="rc-title">📍 Project Location ${isAdmin()?`<button class="btn btn-p btn-s" onclick="openEditProject('${pid}')">✎ Edit</button>`:''}</div>
+      ${p.clientLocation?`
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+          <div style="flex:1;min-width:200px">
+            ${(()=>{const parsed=parseMapsInput(p.clientLocation);return`
+            <a href="${parsed?parsed.url:esc(p.clientLocation)}"
+              target="_blank"
+              style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;background:#e8f4f3;border:2px solid var(--teal);border-radius:8px;color:var(--teal);font-weight:700;font-size:.88rem;text-decoration:none">
+              📍 Open in Google Maps
+            </a>
+            ${parsed&&parsed.coords?`<div style="font-size:.72rem;color:var(--mid);margin-top:6px">📌 ${parsed.coords}</div>`:''}
+            `;})()}
+          </div>
+          ${(p.supIds||[]).length?`<div>
+            <div style="font-size:.72rem;font-weight:700;color:var(--mid);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Share with supervisors</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              ${(p.supIds||[]).map(id=>{const s=S.supervisors.find(x=>x.id===id);if(!s||!s.phone)return'';
+                const msg=encodeURIComponent('📍 Location for project: '+p.name+'\n'+(p.clientLocation.startsWith('http')?p.clientLocation:'https://www.google.com/maps/search/'+encodeURIComponent(p.clientLocation)));
+                return`<a href="https://wa.me/${s.phone.replace(/\D/g,'')}?text=${msg}" target="_blank"
+                  style="display:inline-flex;align-items:center;gap:5px;padding:7px 12px;background:var(--wa);color:white;border-radius:6px;font-size:.78rem;font-weight:700;text-decoration:none">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.119.554 4.107 1.523 5.832L0 24l6.335-1.493A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-1.891 0-3.663-.5-5.187-1.373l-.372-.22-3.763.887.938-3.669-.242-.389A9.938 9.938 0 012 12c0-5.514 4.486-10 10-10s10 4.486 10 10-4.486 10-10 10z"/></svg>
+                  ${esc(s.name)}
+                </a>`;}).filter(Boolean).join('')}
+            </div>
+            <div style="font-size:.7rem;color:var(--mid);margin-top:6px">⚠️ Only shows supervisors with a WhatsApp number saved</div>
+          </div>`:''}
+        </div>
+      `:`<div style="font-size:.84rem;color:var(--mid)">${isAdmin()?'No location set — click Edit to add a Google Maps link or address.':'No location set yet.'}</div>`}
     </div>
     <div class="report-card full">
       <div class="rc-title">Timeline ${isAdmin()?'':'(set by manager)'}</div>
@@ -1748,23 +2080,72 @@ function renderVList(listId,filterSup,isAdmin){
     const sn=(v.supIds||[]).map(id=>{const s=S.supervisors.find(x=>x.id===id);return s?s.name:'';}).filter(Boolean).join(', ');
     const vd=new Date(v.date);
     const past=vd<now;
+    const acceptStatus=v.acceptStatus||{};
+
+    // For supervisor view — show their own accept/decline status
+    const myStatus=filterSup?acceptStatus[filterSup]:null;
+    const statusBadge=myStatus==='accepted'
+      ?`<span style="background:#d4ede8;color:#1a4a47;padding:2px 10px;border-radius:20px;font-size:.72rem;font-weight:700">✅ You accepted</span>`
+      :myStatus==='declined'
+      ?`<span style="background:#f8d7da;color:#721c24;padding:2px 10px;border-radius:20px;font-size:.72rem;font-weight:700">❌ You declined</span>`
+      :filterSup?`<span style="background:#fde8c0;color:#7a4a00;padding:2px 10px;border-radius:20px;font-size:.72rem;font-weight:700">⏳ Awaiting your response</span>`:'';
+
+    // For admin view — show each supervisor's response
+    const adminStatusRow=isAdmin&&(v.supIds||[]).length?`
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+        ${(v.supIds||[]).map(id=>{
+          const s=S.supervisors.find(x=>x.id===id);if(!s)return'';
+          const st=acceptStatus[id];
+          const col=st==='accepted'?'#d4ede8':st==='declined'?'#f8d7da':'#fde8c0';
+          const tc=st==='accepted'?'#1a4a47':st==='declined'?'#721c24':'#7a4a00';
+          const icon=st==='accepted'?'✅':st==='declined'?'❌':'⏳';
+          return`<span style="background:${col};color:${tc};padding:2px 8px;border-radius:20px;font-size:.7rem;font-weight:700">${icon} ${esc(s.name)}</span>`;
+        }).join('')}
+      </div>`:'';
+
     return`<div class="vc v${isQ?'quote':'site'}" id="vc-${v.id}" style="${past?'opacity:.65':''}">
       <div class="vdb"><div class="vdb-d">${vd.getDate()}</div><div class="vdb-m">${vd.toLocaleDateString('en-GB',{month:'short'})}</div></div>
       <div class="vi">
-        <span class="vi-badge vi${isQ?'b-quote':isG?'b-general':'b-site'}">${isQ?'📋 Quote':isG?'📍 General':'🔨 Site'}</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+          <span class="vi-badge vi${isQ?'b-quote':isG?'b-general':'b-site'}">${isQ?'📋 Quote':isG?'📍 General':'🔨 Site'}</span>
+          ${statusBadge}
+        </div>
         <div class="vi-proj">${esc(lbl)}</div>
         <div class="vi-sup">👷 ${esc(sn)||'Not assigned'}${v.time?' · ⏰'+v.time:''}</div>
         ${v.notes?`<div class="vi-note">${esc(v.notes)}</div>`:''}
+        ${adminStatusRow}
+        ${!isAdmin&&filterSup&&!past?`
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-s" style="background:var(--success);color:white;border:none" 
+              onclick="respondVisit('${v.id}','${filterSup}','accepted')">✅ Accept</button>
+            <button class="btn btn-s" style="background:var(--danger);color:white;border:none"
+              onclick="respondVisit('${v.id}','${filterSup}','declined')">❌ Decline</button>
+          </div>`:''}
         ${isAdmin?`<div class="vi-actions">
           <button class="btn btn-o btn-s" onclick="openEditVisit('${v.id}')">✎ Edit</button>
           <button class="btn-g" onclick="delVisit('${v.id}')">✕</button>
           ${isQ?`<button class="btn btn-p btn-s" onclick="convertVisit('${v.id}')">→ Create project</button>`:''}
-          ${buildNotifyRow((v.supIds||[]).map(id=>S.supervisors.find(s=>s.id===id)).filter(Boolean),
-            s=>`Hi ${s.name}, you have a ${isQ?'quote':'site'} visit scheduled for ${lbl} on ${v.date}${v.time?' at '+v.time:''}.${v.notes?'\nNotes: '+v.notes:''}`)}
         </div>`:''}
       </div>
     </div>`;
   }).join('');
+}
+
+function respondVisit(vid, supId, response){
+  const v=S.visits.find(x=>x.id===vid);if(!v)return;
+  if(!v.acceptStatus)v.acceptStatus={};
+  v.acceptStatus[supId]=response;
+  saveState();
+  const lbl=v.type==='quote'?(v.newProj||'Quote visit'):v.type==='general'?(v.generalDesc||'General visit'):(S.projects.find(p=>p.id===v.projectId)||{name:'?'}).name;
+  const sup=S.supervisors.find(s=>s.id===supId);
+  toast(response==='accepted'?'Visit accepted ✓':'Visit declined');
+  // Notify admin of the response
+  const admins=S.supervisors.filter(s=>s.isAdmin);
+  admins.forEach(a=>{
+    sendEmail(a,`Visit ${response}: ${lbl}`,
+      `Hi ${a.name}, ${sup?sup.name:'A supervisor'} has ${response} the ${v.type} visit for ${lbl} on ${v.date}${v.time?' at '+v.time:''}.`);
+  });
+  renderSupCal();
 }
 
 function scrollVC(id){const el=document.getElementById('vc-'+id);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});}
@@ -1824,8 +2205,16 @@ function saveVisit(){
   const supIds=Array.from(document.querySelectorAll('#vSupCks input:checked')).map(i=>i.value);
   const time=document.getElementById('vTime').value;
   const notes=document.getElementById('vNotes').value.trim();
-  const vObj={id:editVid||uid(),type,projectId,newProj,generalDesc,supIds,date,time,notes};
-  if(editVid){const i=S.visits.findIndex(x=>x.id===editVid);if(i>-1)S.visits[i]=vObj;}
+  const vObj={id:editVid||uid(),type,projectId,newProj,generalDesc,supIds,date,time,notes,
+    status:'pending', // pending / accepted / declined per supervisor stored in acceptStatus{}
+    acceptStatus:{} // {supId: 'accepted'|'declined'}
+  };
+  if(editVid){
+    const existing=S.visits.find(x=>x.id===editVid);
+    // preserve existing acceptStatus if just editing
+    if(existing)vObj.acceptStatus=existing.acceptStatus||{};
+    const i=S.visits.findIndex(x=>x.id===editVid);if(i>-1)S.visits[i]=vObj;
+  }
   else S.visits.push(vObj);
   saveState();closeOv('visitModal');toast(editVid?'Visit updated \u2713':'Visit scheduled \u2713');
   const label=type==='quote'?newProj:type==='general'?generalDesc:(S.projects.find(p=>p.id===projectId)||{name:'?'}).name;
@@ -2132,6 +2521,8 @@ function openAddProject(){
   document.getElementById('pName').value='';document.getElementById('pRemarks').value='';
   document.getElementById('pClientName').value='';document.getElementById('pClientMobile').value='';
   document.getElementById('pClientEmail').value='';document.getElementById('pClientLocation').value='';
+  document.getElementById('pClientArchitect').value='';
+  document.getElementById('pArchitectMobile').value='';document.getElementById('pArchitectEmail').value='';
   buildPSupCks(null);document.getElementById('projModal').classList.add('open');
 }
 function openEditProject(pid){
@@ -2144,6 +2535,10 @@ function openEditProject(pid){
   document.getElementById('pClientMobile').value=p.clientMobile||'';
   document.getElementById('pClientEmail').value=p.clientEmail||'';
   document.getElementById('pClientLocation').value=p.clientLocation||'';
+  previewLocationInput(p.clientLocation||'');
+  document.getElementById('pClientArchitect').value=p.clientArchitect||'';
+  document.getElementById('pArchitectMobile').value=p.architectMobile||'';
+  document.getElementById('pArchitectEmail').value=p.architectEmail||'';
   buildPSupCks(p.supIds||[]);document.getElementById('projModal').classList.add('open');
 }
 function buildPSupCks(sel){
@@ -2159,7 +2554,15 @@ function saveProject(){
   const clientName=document.getElementById('pClientName').value.trim();
   const clientMobile=document.getElementById('pClientMobile').value.trim();
   const clientEmail=document.getElementById('pClientEmail').value.trim();
-  const clientLocation=document.getElementById('pClientLocation').value.trim();
+  const clientLocation=(()=>{
+    const raw=document.getElementById('pClientLocation').value.trim();
+    if(!raw)return'';
+    const parsed=parseMapsInput(raw);
+    return parsed?parsed.url:raw;
+  })();
+  const clientArchitect=document.getElementById('pClientArchitect').value.trim();
+  const architectMobile=document.getElementById('pArchitectMobile').value.trim();
+  const architectEmail=document.getElementById('pArchitectEmail').value.trim();
   const isPipeline=window._savingAsPipeline;
   window._savingAsPipeline=false;
   let notifySups=[];
@@ -2170,12 +2573,14 @@ function saveProject(){
       p.name=name;p.supIds=supIds;p.remarks=remarks;
       p.clientName=clientName;p.clientMobile=clientMobile;
       p.clientEmail=clientEmail;p.clientLocation=clientLocation;
+      p.clientArchitect=clientArchitect;p.architectMobile=architectMobile;p.architectEmail=architectEmail;
       notifySups=newlyAdded.map(id=>S.supervisors.find(s=>s.id===id)).filter(Boolean);
     }
   } else {
     const np=mkProj(name,supIds,{},remarks);
     np.clientName=clientName;np.clientMobile=clientMobile;
     np.clientEmail=clientEmail;np.clientLocation=clientLocation;
+    np.clientArchitect=clientArchitect;np.architectMobile=architectMobile;np.architectEmail=architectEmail;
     if(isPipeline){np.projectStatus='pipeline';np.priority='medium';}
     S.projects.push(np);
     notifySups=!isPipeline?supIds.map(id=>S.supervisors.find(s=>s.id===id)).filter(Boolean):[];
@@ -2585,11 +2990,11 @@ function voiceInput(fieldId,btn){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){toast('Voice not supported — try Chrome or Safari on iPhone','warn');return;}
   const rec=new SR();
-  rec.lang='en-GB';rec.continuous=false;rec.interimResults=true;
+  rec.lang='en-GB';rec.continuous=false;rec.interimResults=false;
   btn.classList.add('listening');btn.innerHTML='🔴 Listening…';
   activeRecognition=rec;
   rec.onresult=e=>{
-    const t=Array.from(e.results).map(r=>r[0].transcript).join('');
+    const t=e.results[0][0].transcript;
     const f=document.getElementById(fieldId);
     if(f){const ex=(f.value||'').trimEnd();f.value=ex?ex+' '+t:t;}
   };
@@ -2726,6 +3131,8 @@ async function pullFromCloud(){
           if(!p.tlStart)p.tlStart=''; if(!p.tlEnd)p.tlEnd=''; if(!p.tlNotes)p.tlNotes='';
           if(!p.clientName)p.clientName=''; if(!p.clientMobile)p.clientMobile='';
           if(!p.clientEmail)p.clientEmail=''; if(!p.clientLocation)p.clientLocation='';
+          if(!p.clientArchitect)p.clientArchitect='';
+          if(!p.architectMobile)p.architectMobile=''; if(!p.architectEmail)p.architectEmail='';
         });
         // Migrate old pipeline array items into projects
         if(cloud.pipeline&&cloud.pipeline.length){
@@ -2754,6 +3161,8 @@ function startAutoSync(){
   clearInterval(syncTimer);
   syncTimer = setInterval(async ()=>{
     if(!CU) return;
+    // If there's a pending push timer, skip pulling to avoid overwriting local changes
+    if(window._pushTimer) return;
     const changed = await pullAndRefresh();
     if(!changed) await pushToCloud();
   }, 10000);
@@ -2789,6 +3198,8 @@ async function pullAndRefresh(){
         if(!p.tlStart)p.tlStart=''; if(!p.tlEnd)p.tlEnd=''; if(!p.tlNotes)p.tlNotes='';
         if(!p.clientName)p.clientName=''; if(!p.clientMobile)p.clientMobile='';
         if(!p.clientEmail)p.clientEmail=''; if(!p.clientLocation)p.clientLocation='';
+        if(!p.clientArchitect)p.clientArchitect='';
+        if(!p.architectMobile)p.architectMobile=''; if(!p.architectEmail)p.architectEmail='';
       });
     }
     S=cloud;
@@ -2813,7 +3224,7 @@ async function pullAndRefresh(){
 function saveState(){
   try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){toast('Storage full','warn');}
   clearTimeout(window._pushTimer);
-  window._pushTimer = setTimeout(()=>pushToCloud(), 2000);
+  window._pushTimer = setTimeout(()=>{window._pushTimer=null;pushToCloud();}, 5000);
 }
 
 async function saveSupabaseConfig(){
