@@ -86,7 +86,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);min-height
 
 /* ── TABLE ── */
 .tcard{background:var(--white);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:var(--sh);margin-bottom:22px}
-table{width:100%;border-collapse:collapse;min-width:700px}
+table{width:100%;border-collapse:collapse}
 thead tr{background:var(--teal)}
 th{padding:9px 8px;font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--white);text-align:center;border-right:1px solid var(--teal-md);white-space:nowrap}
 th.tl{text-align:left;padding-left:13px}th:last-child{border-right:none}
@@ -267,7 +267,7 @@ textarea.ta:focus{border-color:var(--teal)}
 /* FILE PREVIEW */
 .fp-img{max-width:100%;border-radius:4px;margin-top:10px}
 
-@media(max-width:600px){
+@media(max-width:768px){
   .report-body{grid-template-columns:1fr}
   .cal-day{min-height:52px}
   .cal-ev{display:none}
@@ -1026,8 +1026,14 @@ const URG={
 };
 
 function uid(){return '_'+Math.random().toString(36).slice(2,9)}
-function mkProj(name,supIds,checks,remarks){
-  const p={id:uid(),name,supIds:supIds||[],remarks:remarks||'',files:[],dailyLog:[],tasks:[],snagList:[],variationList:[],urgency:'',
+function getNextRef(){
+  const nums=S.projects.map(p=>parseInt((p.ref||'').replace(/\D/g,''))||0);
+  const next=(nums.length?Math.max(...nums):0)+1;
+  return'AXD '+String(next).padStart(3,'0');
+}
+
+function mkProj(name,supIds,checks){
+  const p={id:uid(),name,ref:getNextRef(),supIds:supIds||[],files:[],dailyLog:[],tasks:[],snagList:[],variationList:[],urgency:'',
     projectStatus:'active', invoiced:false, completedAt:'', priority:'',
     tlStart:'',tlEnd:'',tlNotes:'',
     clientName:'',clientMobile:'',clientEmail:'',clientLocation:'',clientArchitect:'',architectMobile:'',architectEmail:''};
@@ -2038,6 +2044,7 @@ function renderAdminTable(){
     return`<tr class="${u.row}" id="row-${p.id}">
       <td class="tl" style="min-width:180px">
         <div class="proj-link" onclick="openReport('${p.id}','admin')">${esc(p.name)}</div>
+        ${p.ref?`<div style="font-size:.68rem;color:var(--teal);font-weight:700;letter-spacing:.05em;margin-top:2px">${esc(p.ref)}</div>`:''}
         <div style="margin-top:4px">${urgSelect}</div>
       </td>
       <td class="tl team-cell">${esc(sNames)||'<span style="color:#bcc">Unassigned</span>'}</td>
@@ -2065,7 +2072,7 @@ function renderAdminTable(){
       </td>
     </tr>`;
   }).join('');
-  const isMobile=window.innerWidth<700;
+  const isMobile=window.innerWidth<768;
   if(isMobile){
     // Mobile card layout
     wrap.innerHTML=rows.length?rows.map(p=>{
@@ -2084,7 +2091,8 @@ function renderAdminTable(){
       </select>`;
       return`<div class="proj-card ${u.row}" id="row-${p.id}" style="background:var(--white);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;box-shadow:var(--sh)">
         <div style="padding:12px 14px;border-bottom:1px solid var(--border)">
-          <div class="proj-link" onclick="openReport('${p.id}','admin')" style="font-size:1rem;font-weight:700;margin-bottom:6px">${esc(p.name)}</div>
+          <div class="proj-link" onclick="openReport('${p.id}','admin')" style="font-size:1rem;font-weight:700;margin-bottom:2px">${esc(p.name)}</div>
+          ${p.ref?`<div style="font-size:.7rem;color:var(--teal);font-weight:700;margin-bottom:6px">${esc(p.ref)}</div>`:''}
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             ${urgSelect}
             ${sNames?`<span style="font-size:.76rem;color:var(--mid)">👷 ${esc(sNames)}</span>`:''}
@@ -2404,7 +2412,10 @@ function renderReport(pid){
   if(etBtn)etBtn.style.display='inline-flex';
   document.getElementById('reportHdrName').textContent=p.name;
   document.getElementById('reportName').textContent=p.name;
+  const refEl=document.getElementById('reportRef');
+  if(refEl)refEl.textContent=p.ref||'';
   document.getElementById('reportMeta').innerHTML=`
+    ${p.ref?`<span style="background:rgba(255,255,255,.15);padding:3px 10px;border-radius:12px;font-size:.78rem;font-weight:700;letter-spacing:.05em">${esc(p.ref)}</span>`:''}
     <span>👷 ${esc(sNames)||'No supervisor'}</span>
     <span>✅ ${doneC}/${CKS.length} checks</span>
     <span>📋 ${doneT}/${totalT} tasks</span>
@@ -4418,6 +4429,24 @@ function onLoginNameChange(){
 }
 
 initEmailJS();
+// ── ONE-TIME: assign refs to existing projects that don't have one ──
+(function assignMissingRefs(){
+  // Only active and pipeline projects get refs
+  const needsRef=S.projects.filter(p=>!p.ref&&(p.projectStatus||'active')!=='completed');
+  if(!needsRef.length)return;
+  // Find highest existing ref number
+  const existing=S.projects.map(p=>parseInt((p.ref||'').replace(/\D/g,''))||0);
+  let next=existing.length?Math.max(...existing):0;
+  needsRef.forEach(p=>{
+    next++;
+    p.ref='AXD '+String(next).padStart(3,'0');
+  });
+  try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+  clearTimeout(window._pushTimer);
+  window._pushTimer=setTimeout(()=>{window._pushTimer=null;pushToCloud();},3000);
+  console.log(`Assigned refs to ${needsRef.length} projects`);
+})();
+
 initSupabase();
 buildLoginList();
 showBiometricBtn();
