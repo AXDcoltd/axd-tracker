@@ -2794,15 +2794,53 @@ function delTask(pid,idx){
 // ═══════════════════════════════════════════════════
 //  FILES
 // ═══════════════════════════════════════════════════
+// ── IMAGE & FILE COMPRESSION ──
+// Compresses images to max 1200px and 85% quality — reduces ~3MB photo to ~80KB
+function compressImage(file, maxW=1200, maxH=1200, quality=0.82){
+  return new Promise(resolve=>{
+    if(!file.type.startsWith('image/')){
+      // Non-image files: just read as-is (PDFs, docs etc)
+      const r=new FileReader();
+      r.onload=e=>resolve({data:e.target.result,name:file.name,type:file.type});
+      r.readAsDataURL(file);
+      return;
+    }
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>maxW||h>maxH){
+          const ratio=Math.min(maxW/w,maxH/h);
+          w=Math.round(w*ratio);h=Math.round(h*ratio);
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=w;canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        const compressed=canvas.toDataURL('image/jpeg',quality);
+        const origKB=Math.round(e.target.result.length*0.75/1024);
+        const newKB=Math.round(compressed.length*0.75/1024);
+        console.log(`Compressed ${file.name}: ${origKB}KB → ${newKB}KB (${Math.round(newKB/origKB*100)}%)`);
+        resolve({data:compressed,name:file.name.replace(/\.[^.]+$/,'.jpg'),type:'image/jpeg'});
+      };
+      img.src=e.target.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
 function handleUp(pid,input){
   const p=S.projects.find(x=>x.id===pid);if(!p)return;
   const fs=Array.from(input.files);let done=0;
-  fs.forEach(file=>{
-    const r=new FileReader();
-    r.onload=e=>{p.files.push({name:file.name,type:file.type,data:e.target.result});done++;
-      if(done===fs.length){saveState();toast(done+' file'+(done>1?'s':'')+' uploaded ✓');renderReport(pid);}
-    };r.readAsDataURL(file);
-  });input.value='';
+  toast('Uploading '+fs.length+' file'+(fs.length>1?'s':'')+'…');
+  fs.forEach(async file=>{
+    const compressed=await compressImage(file);
+    p.files.push({name:compressed.name,type:compressed.type,data:compressed.data});
+    done++;
+    if(done===fs.length){saveState();toast(done+' file'+(done>1?'s':'')+' uploaded ✓');renderReport(pid);}
+  });
+  input.value='';
 }
 function delFile(pid,idx){
   confirmDo('Remove file?','This file will be permanently removed.',()=>{
@@ -3833,17 +3871,30 @@ function delVariation(pid,idx){
   });
 }
 
+function handleVarPhotos(files){
+  Array.from(files).forEach(async file=>{
+    const compressed=await compressImage(file);
+    pendingVarPhotos.push(compressed.data);
+    renderPendingVarPhotos();
+  });
+}
+function renderPendingVarPhotos(){
+  document.getElementById('varPhotosList').innerHTML=pendingVarPhotos.map((ph,i)=>`
+    <div class="fc" style="padding:3px">
+      <img src="${ph}" style="width:50px;height:50px;object-fit:cover;border-radius:4px">
+      <button class="fc-del" onclick="pendingVarPhotos.splice(${i},1);renderPendingVarPhotos()">✕</button>
+    </div>`).join('');
+}
+
 function addVarPhoto(pid,idx,files){
   const p=S.projects.find(x=>x.id===pid);if(!p)return;
-  Array.from(files).forEach(file=>{
-    const r=new FileReader();
-    r.onload=e=>{
-      p.variationList[idx].photos=p.variationList[idx].photos||[];
-      p.variationList[idx].photos.push(e.target.result);
-      saveState();
-      const wrap=document.getElementById('varList-'+pid);
-      if(wrap)wrap.innerHTML=buildVarHtml(p);
-    };r.readAsDataURL(file);
+  Array.from(files).forEach(async file=>{
+    const compressed=await compressImage(file);
+    p.variationList[idx].photos=p.variationList[idx].photos||[];
+    p.variationList[idx].photos.push(compressed.data);
+    saveState();
+    const wrap=document.getElementById('varList-'+pid);
+    if(wrap)wrap.innerHTML=buildVarHtml(p);
   });
 }
 
@@ -3907,10 +3958,10 @@ function openAddSnag(pid){
 }
 
 function handleSnagPhotos(files){
-  Array.from(files).forEach(file=>{
-    const r=new FileReader();
-    r.onload=e=>{pendingSnagPhotos.push(e.target.result);renderPendingSnagPhotos();};
-    r.readAsDataURL(file);
+  Array.from(files).forEach(async file=>{
+    const compressed=await compressImage(file);
+    pendingSnagPhotos.push(compressed.data);
+    renderPendingSnagPhotos();
   });
 }
 function renderPendingSnagPhotos(){
@@ -3968,15 +4019,13 @@ function delSnag(pid,idx){
 
 function addSnagPhoto(pid,idx,files){
   const p=S.projects.find(x=>x.id===pid);if(!p)return;
-  Array.from(files).forEach(file=>{
-    const r=new FileReader();
-    r.onload=e=>{
-      p.snagList[idx].photos=p.snagList[idx].photos||[];
-      p.snagList[idx].photos.push(e.target.result);
-      saveState();
-      const wrap=document.getElementById('snagList-'+pid);
-      if(wrap)wrap.innerHTML=buildSnagHtml(p);
-    };r.readAsDataURL(file);
+  Array.from(files).forEach(async file=>{
+    const compressed=await compressImage(file);
+    p.snagList[idx].photos=p.snagList[idx].photos||[];
+    p.snagList[idx].photos.push(compressed.data);
+    saveState();
+    const wrap=document.getElementById('snagList-'+pid);
+    if(wrap)wrap.innerHTML=buildSnagHtml(p);
   });
 }
 
