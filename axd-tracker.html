@@ -571,13 +571,28 @@ textarea.ta:focus{border-color:var(--teal)}
   <div id="aSettings" class="tab-panel app-shell">
     <div class="sec" style="margin-bottom:16px">Notification Settings</div>
 
+    <!-- Data Recovery -->
     <div style="background:var(--white);border:2px solid var(--danger);border-radius:8px;padding:20px;box-shadow:var(--sh);margin-bottom:20px">
       <div class="sec" style="margin-bottom:10px;color:var(--danger)">↩ Data Recovery</div>
       <p style="font-size:.82rem;color:var(--mid);margin-bottom:12px">The app saves a snapshot every 5 minutes automatically. If you accidentally delete something, restore from a recent snapshot here.</p>
-      <div style="display:flex;gap:8px;margin-bottom:14px">
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
         <button class="btn btn-p btn-s" onclick="saveRecoverySnapshot();renderRecoverySection();toast('Snapshot saved ✓')">📸 Save snapshot now</button>
       </div>
       <div id="recoverySection"><div style="font-size:.82rem;color:var(--mid)">Loading...</div></div>
+    </div>
+
+    <!-- Full Backup -->
+    <div style="background:var(--white);border:2px solid var(--teal);border-radius:8px;padding:20px;box-shadow:var(--sh);margin-bottom:20px">
+      <div class="sec" style="margin-bottom:6px;color:var(--teal)">💾 Full Data Backup</div>
+      <p style="font-size:.82rem;color:var(--mid);margin-bottom:14px">Download all your project data as a file you can keep on your computer, USB drive or email to yourself. Use this as an offline backup in case GitHub or Supabase are unavailable.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="downloadBackup()">⬇ Download backup</button>
+        <label class="btn btn-o" style="cursor:pointer">
+          ⬆ Restore from backup
+          <input type="file" accept=".json" style="display:none" onchange="restoreFromBackup(this)">
+        </label>
+      </div>
+      <p style="font-size:.74rem;color:var(--mid);margin-top:10px">💡 Tip: email the backup file to yourself monthly so you always have a copy safe.</p>
     </div>
 
     <div style="background:var(--white);border:2px solid var(--teal);border-radius:8px;padding:20px;box-shadow:var(--sh);margin-bottom:20px">
@@ -1674,6 +1689,54 @@ function delVarFromTab(pid,idx){
     saveState();toast('Variation deleted');
     renderVariationsTab();
   });
+}
+
+function downloadBackup(){
+  const backup={
+    version:'axd_backup_v1',
+    exportedAt:new Date().toLocaleString('en-GB'),
+    exportedBy:CU?CU.name:'',
+    projects:S.projects.length,
+    data:S
+  };
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  const date=new Date().toISOString().slice(0,10);
+  a.href=url;
+  a.download=`AXD-Backup-${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup downloaded ✓');
+}
+
+function restoreFromBackup(input){
+  const file=input.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const backup=JSON.parse(e.target.result);
+      if(!backup.data||!backup.data.projects){
+        toast('Invalid backup file','warn');return;
+      }
+      confirmDo('Restore from backup?',
+        `This will replace all current data with the backup from ${backup.exportedAt||'unknown date'} (${backup.projects} projects).\n\nThis cannot be undone — save a snapshot first if needed.`,
+        ()=>{
+          saveRecoverySnapshot(); // save current state first
+          S=backup.data;
+          localStorage.setItem(KEY,JSON.stringify(S));
+          clearTimeout(window._pushTimer);
+          window._pushTimer=setTimeout(()=>{window._pushTimer=null;pushToCloud();},3000);
+          toast('Data restored from backup ✓');
+          renderAdmin();
+          renderRecoverySection();
+        },false);
+    }catch(err){
+      toast('Could not read backup file','warn');
+    }
+  };
+  r.readAsText(file);
+  input.value='';
 }
 
 function renderAdmin(){
