@@ -1723,11 +1723,12 @@ function showSup(){
 
 async function requestNotificationPermission(){
   if(!('Notification' in window))return;
-  // Only ask if not yet decided — and only once per session
-  if(Notification.permission==='default'&&!window._notifAsked){
-    window._notifAsked=true;
-    await Notification.requestPermission();
-  }
+  // Never ask again if already granted or denied
+  if(Notification.permission==='granted'||Notification.permission==='denied')return;
+  // Only ask once per browser (store in localStorage)
+  if(localStorage.getItem('axd_notif_asked'))return;
+  localStorage.setItem('axd_notif_asked','1');
+  await Notification.requestPermission();
 }
 
 
