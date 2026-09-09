@@ -2441,6 +2441,34 @@ function delTask(pid,idx){
   p.tasks.splice(idx,1);saveState();renderReport(pid);
 }
 
+// ── SUPABASE STORAGE ──
+const STORAGE_BUCKET='axd-photos';
+
+async function uploadPhotoToStorage(dataUrl){
+  if(!sbUrl||!sbKey)return null;
+  try{
+    const res=await fetch(dataUrl);
+    const blob=await res.blob();
+    const ext=blob.type==='image/jpeg'?'jpg':'png';
+    const path=`${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+    const uploadRes=await fetch(`${sbUrl}/storage/v1/object/${STORAGE_BUCKET}/${path}`,{
+      method:'POST',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':blob.type,'x-upsert':'true'},
+      body:blob
+    });
+    if(!uploadRes.ok)return null;
+    return `${sbUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
+  }catch(e){return null;}
+}
+
+async function uploadOrStore(dataUrl){
+  if(sbUrl&&sbKey){
+    const url=await uploadPhotoToStorage(dataUrl);
+    if(url)return url;
+  }
+  return dataUrl; // fallback to base64 if offline
+}
+
 function compressImage(file, maxW=1200, maxH=1200, quality=0.82){
   return new Promise(resolve=>{
     if(!file.type.startsWith('image/')){
@@ -2481,7 +2509,8 @@ function handleUp(pid,input){
   toast('Uploading '+fs.length+' file'+(fs.length>1?'s':'')+'…');
   fs.forEach(async file=>{
     const compressed=await compressImage(file);
-    p.files.push({name:compressed.name,type:compressed.type,data:compressed.data});
+    const storedUrl=await uploadOrStore(compressed.data);
+    p.files.push({name:compressed.name,type:compressed.type,data:storedUrl});
     done++;
     if(done===fs.length){saveState();toast(done+' file'+(done>1?'s':'')+' uploaded ✓');renderReport(pid);}
   });
@@ -3480,7 +3509,8 @@ function delVariation(pid,idx){
 function handleVarPhotos(files){
   Array.from(files).forEach(async file=>{
     const compressed=await compressImage(file);
-    pendingVarPhotos.push(compressed.data);
+    const storedUrl=await uploadOrStore(compressed.data);
+    pendingVarPhotos.push(storedUrl);
     renderPendingVarPhotos();
   });
 }
@@ -3496,8 +3526,9 @@ function addVarPhoto(pid,idx,files){
   const p=S.projects.find(x=>x.id===pid);if(!p)return;
   Array.from(files).forEach(async file=>{
     const compressed=await compressImage(file);
+    const storedUrl=await uploadOrStore(compressed.data);
     p.variationList[idx].photos=p.variationList[idx].photos||[];
-    p.variationList[idx].photos.push(compressed.data);
+    p.variationList[idx].photos.push(storedUrl);
     saveState();
     const wrap=document.getElementById('varList-'+pid);
     if(wrap)wrap.innerHTML=buildVarHtml(p);
@@ -3563,7 +3594,8 @@ function openAddSnag(pid){
 function handleSnagPhotos(files){
   Array.from(files).forEach(async file=>{
     const compressed=await compressImage(file);
-    pendingSnagPhotos.push(compressed.data);
+    const storedUrl=await uploadOrStore(compressed.data);
+    pendingSnagPhotos.push(storedUrl);
     renderPendingSnagPhotos();
   });
 }
@@ -3624,8 +3656,9 @@ function addSnagPhoto(pid,idx,files){
   const p=S.projects.find(x=>x.id===pid);if(!p)return;
   Array.from(files).forEach(async file=>{
     const compressed=await compressImage(file);
+    const storedUrl=await uploadOrStore(compressed.data);
     p.snagList[idx].photos=p.snagList[idx].photos||[];
-    p.snagList[idx].photos.push(compressed.data);
+    p.snagList[idx].photos.push(storedUrl);
     saveState();
     const wrap=document.getElementById('snagList-'+pid);
     if(wrap)wrap.innerHTML=buildSnagHtml(p);
